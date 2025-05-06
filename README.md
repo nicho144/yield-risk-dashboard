@@ -47,4 +47,4 @@ git clone https://github.com/yourusername/yield-risk-dashboard.git
 
 ## License
 
-MIT License 
+MIT License # Updated deployment
