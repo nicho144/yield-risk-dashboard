@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yield Risk Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // API Configuration
         let config;
@@ -389,6 +390,39 @@
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        
+        .status-indicator.connected {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .status-indicator.disconnected {
+            background-color: #ffebee;
+            color: #d32f2f;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .connected .status-dot {
+            background-color: #2e7d32;
+        }
+        
+        .disconnected .status-dot {
+            background-color: #d32f2f;
         }
     </style>
 </head>
@@ -778,96 +812,93 @@
             }
         }
 
-        async function fetchLatestData() {
-            const loadingDiv = document.getElementById('loading');
-            const errorDiv = document.getElementById('error');
-            
+        // Add WebSocket connection
+        const socket = io('http://localhost:5000');
+
+        socket.on('connect', () => {
+            console.log('WebSocket connected');
+            showSuccess('Real-time updates connected');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('WebSocket disconnected');
+            showError('Real-time updates disconnected');
+        });
+
+        socket.on('market_update', (data) => {
+            console.log('Received market update:', data);
+            updateUIWithYFinanceData(data);
+            showSuccess('Data updated in real-time');
+        });
+
+        // Update the fetchData function to handle both REST and WebSocket
+        async function fetchData() {
+            showLoading();
             try {
-                loadingDiv.style.display = 'block';
-                errorDiv.style.display = 'none';
-                Logger.log('Starting data fetch...', 'info');
-
-                // Initialize with default values
-                const defaultData = {
-                    fedFundsRate: 0,
-                    treasury2Y: 0,
-                    treasury5Y: 0,
-                    treasury10Y: 0,
-                    treasury30Y: 0,
-                    corporateYield: 0,
-                    highYieldSpread: 0
-                };
-
-                // Fetch FRED data with error handling
-                let fredData;
-                try {
-                    fredData = await Promise.all([
-                        fetchFredData(FRED_SERIES.FEDFUNDS.id),
-                        fetchFredData(FRED_SERIES.DGS2.id),
-                        fetchFredData(FRED_SERIES.DGS5.id),
-                        fetchFredData(FRED_SERIES.DGS10.id),
-                        fetchFredData(FRED_SERIES.DGS30.id),
-                        fetchFredData(FRED_SERIES.BAA.id),
-                        fetchFredData(FRED_SERIES.BAMLH0A0HYM2.id)
-                    ]);
-                } catch (fredError) {
-                    Logger.log(`FRED API Error: ${fredError.message}`, 'error');
-                    fredData = Array(7).fill(defaultData);
+                // Try FRED API first
+                const fredData = await fetchFredData();
+                if (fredData) {
+                    updateUIWithFredData(fredData);
+                    showSuccess('Data loaded from FRED');
+                    return;
                 }
-
-                // Update input fields with real data or defaults
-                document.getElementById('fedFunds').value = (fredData[0].current || 0).toFixed(2);
-                document.getElementById('treasury2Y').value = (fredData[1].current || 0).toFixed(2);
-                document.getElementById('treasury5Y').value = (fredData[2].current || 0).toFixed(2);
-                document.getElementById('treasury10Y').value = (fredData[3].current || 0).toFixed(2);
-                document.getElementById('treasury30Y').value = (fredData[4].current || 0).toFixed(2);
-                document.getElementById('corporateYield').value = (fredData[5].current || 0).toFixed(2);
-                document.getElementById('highYieldSpread').value = (fredData[6].current || 0).toFixed(2);
-
-                // Update last updated timestamp
-                const lastUpdated = new Date().toLocaleString();
-                document.getElementById('lastUpdated').textContent = 
-                    `Last updated: ${lastUpdated}`;
-                Logger.log(`Data updated at ${lastUpdated}`, 'success');
-
-                // Update all analyses
-                await Promise.all([
-                    updateCalculations(),
-                    updateYieldAnalysis(),
-                    updateFedFundsAnalysis()
-                ]);
-
-                // Show success message
-                const successMessage = document.createElement('div');
-                successMessage.className = 'success-message';
-                successMessage.textContent = 'Data loaded successfully!';
-                document.querySelector('.container').insertBefore(
-                    successMessage,
-                    document.querySelector('.risk-status')
-                );
-                setTimeout(() => successMessage.remove(), 3000);
-
+                
+                // If FRED fails, try yfinance backend
+                const response = await fetch('http://localhost:5000/api/market-data');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch data from yfinance');
+                }
+                
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Update UI with yfinance data
+                updateUIWithYFinanceData(data);
+                showSuccess('Data loaded from yfinance');
+                
             } catch (error) {
-                const errorMessage = `Error fetching data: ${error.message}`;
-                errorDiv.textContent = errorMessage;
-                errorDiv.style.display = 'block';
-                Logger.log(errorMessage, 'error');
-
-                // Show error message in UI
-                const errorDisplay = document.createElement('div');
-                errorDisplay.className = 'error-display';
-                errorDisplay.innerHTML = `
-                    <h3>⚠️ Error Loading Data</h3>
-                    <p>${errorMessage}</p>
-                    <p>Please try again in a few minutes.</p>
-                `;
-                document.querySelector('.container').insertBefore(
-                    errorDisplay,
-                    document.querySelector('.risk-status')
-                );
+                console.error('Error fetching data:', error);
+                showError('Failed to fetch data. Using default values.');
+                useDefaultValues();
             } finally {
-                loadingDiv.style.display = 'none';
+                hideLoading();
             }
+        }
+
+        function updateUIWithYFinanceData(data) {
+            // Update Treasury yields
+            if (data.treasury) {
+                if (data.treasury['2Y']) document.getElementById('treasury2Y').value = data.treasury['2Y'].toFixed(2);
+                if (data.treasury['5Y']) document.getElementById('treasury5Y').value = data.treasury['5Y'].toFixed(2);
+                if (data.treasury['10Y']) document.getElementById('treasury10Y').value = data.treasury['10Y'].toFixed(2);
+                if (data.treasury['30Y']) document.getElementById('treasury30Y').value = data.treasury['30Y'].toFixed(2);
+                if (data.treasury['13W']) document.getElementById('treasury13W').value = data.treasury['13W'].toFixed(2);
+            }
+            
+            // Update market data
+            if (data.market) {
+                if (data.market.VIX) {
+                    document.getElementById('vix').value = data.market.VIX.current.toFixed(2);
+                    updateVixStatus(data.market.VIX.current);
+                }
+                if (data.market.SPY) {
+                    document.getElementById('spy').value = data.market.SPY.current.toFixed(2);
+                    updateSpyStatus(data.market.SPY.change_percent);
+                }
+                if (data.market.GOLD) {
+                    document.getElementById('gold').value = data.market.GOLD.current.toFixed(2);
+                    updateGoldStatus(data.market.GOLD.change_percent);
+                }
+                if (data.market.DXY) {
+                    document.getElementById('dxy').value = data.market.DXY.current.toFixed(2);
+                    updateDxyStatus(data.market.DXY.change_percent);
+                }
+            }
+            
+            // Recalculate risk score
+            calculateRiskScore();
         }
 
         // Add API status indicators
@@ -1740,6 +1771,31 @@
                 Test All API Connections
             </button>
         `);
+
+        // Add WebSocket status indicator
+        function updateWebSocketStatus(connected) {
+            const statusDiv = document.createElement('div');
+            statusDiv.id = 'websocket-status';
+            statusDiv.className = `status-indicator ${connected ? 'connected' : 'disconnected'}`;
+            statusDiv.innerHTML = `
+                <span class="status-dot"></span>
+                <span class="status-text">${connected ? 'Real-time updates connected' : 'Real-time updates disconnected'}</span>
+            `;
+            
+            const existingStatus = document.getElementById('websocket-status');
+            if (existingStatus) {
+                existingStatus.replaceWith(statusDiv);
+            } else {
+                document.querySelector('.container').insertBefore(
+                    statusDiv,
+                    document.querySelector('.risk-status')
+                );
+            }
+        }
+
+        // Update WebSocket status on connection events
+        socket.on('connect', () => updateWebSocketStatus(true));
+        socket.on('disconnect', () => updateWebSocketStatus(false));
     </script>
 </body>
 </html> 
