@@ -346,6 +346,50 @@
             margin: 5px 0;
             color: #666;
         }
+        .error-display {
+            background-color: #ffebee;
+            border: 1px solid #f44336;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #d32f2f;
+        }
+        .success-message {
+            background-color: #e8f5e9;
+            border: 1px solid #4caf50;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #2e7d32;
+            animation: fadeOut 3s forwards;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .loading::after {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid #2196f3;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -743,32 +787,42 @@
                 errorDiv.style.display = 'none';
                 Logger.log('Starting data fetch...', 'info');
 
-                // Fetch FRED data
-                const fredData = await Promise.all([
-                    fetchFredData(FRED_SERIES.FEDFUNDS.id),
-                    fetchFredData(FRED_SERIES.DGS2.id),
-                    fetchFredData(FRED_SERIES.DGS5.id),
-                    fetchFredData(FRED_SERIES.DGS10.id),
-                    fetchFredData(FRED_SERIES.DGS30.id),
-                    fetchFredData(FRED_SERIES.BAA.id),
-                    fetchFredData(FRED_SERIES.BAMLH0A0HYM2.id)
-                ]);
+                // Initialize with default values
+                const defaultData = {
+                    fedFundsRate: 0,
+                    treasury2Y: 0,
+                    treasury5Y: 0,
+                    treasury10Y: 0,
+                    treasury30Y: 0,
+                    corporateYield: 0,
+                    highYieldSpread: 0
+                };
 
-                // Fetch Nasdaq data
-                const nasdaqData = await Promise.all([
-                    fetchNasdaqData(NASDAQ_SERIES.TREASURY.dataset, { limit: 1 }),
-                    fetchNasdaqData(NASDAQ_SERIES.CORPORATE.dataset, { limit: 1 }),
-                    fetchNasdaqData(NASDAQ_SERIES.HIGH_YIELD.dataset, { limit: 1 })
-                ]);
+                // Fetch FRED data with error handling
+                let fredData;
+                try {
+                    fredData = await Promise.all([
+                        fetchFredData(FRED_SERIES.FEDFUNDS.id),
+                        fetchFredData(FRED_SERIES.DGS2.id),
+                        fetchFredData(FRED_SERIES.DGS5.id),
+                        fetchFredData(FRED_SERIES.DGS10.id),
+                        fetchFredData(FRED_SERIES.DGS30.id),
+                        fetchFredData(FRED_SERIES.BAA.id),
+                        fetchFredData(FRED_SERIES.BAMLH0A0HYM2.id)
+                    ]);
+                } catch (fredError) {
+                    Logger.log(`FRED API Error: ${fredError.message}`, 'error');
+                    fredData = Array(7).fill(defaultData);
+                }
 
-                // Update input fields with real data
-                document.getElementById('fedFunds').value = fredData[0].current.toFixed(2);
-                document.getElementById('treasury2Y').value = fredData[1].current.toFixed(2);
-                document.getElementById('treasury5Y').value = fredData[2].current.toFixed(2);
-                document.getElementById('treasury10Y').value = fredData[3].current.toFixed(2);
-                document.getElementById('treasury30Y').value = fredData[4].current.toFixed(2);
-                document.getElementById('corporateYield').value = fredData[5].current.toFixed(2);
-                document.getElementById('highYieldSpread').value = fredData[6].current.toFixed(2);
+                // Update input fields with real data or defaults
+                document.getElementById('fedFunds').value = (fredData[0].current || 0).toFixed(2);
+                document.getElementById('treasury2Y').value = (fredData[1].current || 0).toFixed(2);
+                document.getElementById('treasury5Y').value = (fredData[2].current || 0).toFixed(2);
+                document.getElementById('treasury10Y').value = (fredData[3].current || 0).toFixed(2);
+                document.getElementById('treasury30Y').value = (fredData[4].current || 0).toFixed(2);
+                document.getElementById('corporateYield').value = (fredData[5].current || 0).toFixed(2);
+                document.getElementById('highYieldSpread').value = (fredData[6].current || 0).toFixed(2);
 
                 // Update last updated timestamp
                 const lastUpdated = new Date().toLocaleString();
@@ -783,11 +837,34 @@
                     updateFedFundsAnalysis()
                 ]);
 
+                // Show success message
+                const successMessage = document.createElement('div');
+                successMessage.className = 'success-message';
+                successMessage.textContent = 'Data loaded successfully!';
+                document.querySelector('.container').insertBefore(
+                    successMessage,
+                    document.querySelector('.risk-status')
+                );
+                setTimeout(() => successMessage.remove(), 3000);
+
             } catch (error) {
                 const errorMessage = `Error fetching data: ${error.message}`;
                 errorDiv.textContent = errorMessage;
                 errorDiv.style.display = 'block';
                 Logger.log(errorMessage, 'error');
+
+                // Show error message in UI
+                const errorDisplay = document.createElement('div');
+                errorDisplay.className = 'error-display';
+                errorDisplay.innerHTML = `
+                    <h3>⚠️ Error Loading Data</h3>
+                    <p>${errorMessage}</p>
+                    <p>Please try again in a few minutes.</p>
+                `;
+                document.querySelector('.container').insertBefore(
+                    errorDisplay,
+                    document.querySelector('.risk-status')
+                );
             } finally {
                 loadingDiv.style.display = 'none';
             }
@@ -1663,38 +1740,6 @@
                 Test All API Connections
             </button>
         `);
-
-        // Add styles for API test results
-        const style = document.createElement('style');
-        style.textContent = `
-            .api-test-results {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                gap: 20px;
-                margin: 20px 0;
-            }
-            .api-test-item {
-                padding: 15px;
-                border-radius: 8px;
-                background: white;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .api-test-item.success {
-                border-left: 4px solid #4CAF50;
-            }
-            .api-test-item.error {
-                border-left: 4px solid #f44336;
-            }
-            .api-test-item h4 {
-                margin: 0 0 10px 0;
-                color: #333;
-            }
-            .api-test-item p {
-                margin: 5px 0;
-                color: #666;
-            }
-        `;
-        document.head.appendChild(style);
     </script>
 </body>
 </html> 
