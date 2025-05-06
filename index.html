@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yield Risk Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // API Configuration
+        let config;
+        try {
+            // Try to load local config
+            config = require('./config.js');
+        } catch (e) {
+            // If local config fails, use environment variables (GitHub Pages)
+            config = {
+                FRED_API_KEY: process.env.FRED_API_KEY || '',
+                NASDAQ_API_KEY: process.env.NASDAQ_API_KEY || '',
+                NEWS_API_KEY: process.env.NEWS_API_KEY || ''
+            };
+        }
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -305,6 +320,32 @@
             background: #e3f2fd;
             z-index: 1000;
         }
+        .api-test-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .api-test-item {
+            padding: 15px;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .api-test-item.success {
+            border-left: 4px solid #4CAF50;
+        }
+        .api-test-item.error {
+            border-left: 4px solid #f44336;
+        }
+        .api-test-item h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .api-test-item p {
+            margin: 5px 0;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -312,7 +353,7 @@
         <h1>Yield Risk Dashboard</h1>
         
         <button class="refresh-button" onclick="fetchLatestData()">Refresh Data</button>
-        <button class="refresh-button" onclick="testFredConnection()" style="background-color: #2196F3;">Test FRED Connection</button>
+        <button class="refresh-button" onclick="testAllApis()" style="background-color: #2196F3;">Test All API Connections</button>
         <div id="loading" class="loading">Loading latest market data...</div>
         <div id="error" class="error-message"></div>
         <div id="lastUpdated" class="last-updated"></div>
@@ -405,8 +446,9 @@
     <script>
         let historicalData = [];
         let yieldCurveChart;
-        const FRED_API_KEY = 'dceb19d6ccadfb4115c3ac2493b7d5ed';
-        const NASDAQ_API_KEY = 'XLTzbBjvffmrseg66XsR';
+        const FRED_API_KEY = config.FRED_API_KEY;
+        const NASDAQ_API_KEY = config.NASDAQ_API_KEY;
+        const NEWS_API_KEY = config.NEWS_API_KEY;
 
         // FRED Series IDs with descriptions
         const FRED_SERIES = {
@@ -751,26 +793,66 @@
             }
         }
 
+        // Add API status indicators
+        function updateApiStatus(api, status, message) {
+            const apiTest = document.getElementById('apiTest');
+            apiTest.innerHTML += `<div class="log-entry ${status}">
+                <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                ${api}: ${message}
+            </div>`;
+        }
+
+        // Test FRED API connection
         async function testFredConnection() {
-            const apiTestDiv = document.getElementById('apiTest');
-            apiTestDiv.innerHTML = '<h3>Testing FRED API Connection...</h3>';
-            
             try {
-                // Test each series
-                for (const [key, series] of Object.entries(FRED_SERIES)) {
-                    const value = await fetchFredData(series.id);
-                    apiTestDiv.innerHTML += `
-                        <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                            <strong>${series.name}</strong><br>
-                            Series ID: ${series.id}<br>
-                            Description: ${series.description}<br>
-                            Latest Value: ${value.current.toFixed(2)}%<br>
-                            <a href="https://fred.stlouisfed.org/series/${series.id}" target="_blank">View on FRED</a>
-                        </div>
-                    `;
+                const response = await fetch(`https://api.stlouisfed.org/fred/series?series_id=FEDFUNDS&api_key=${FRED_API_KEY}&file_type=json`);
+                const data = await response.json();
+                if (data.seriess) {
+                    updateApiStatus('FRED', 'success', 'Connection successful');
+                    return true;
+                } else {
+                    updateApiStatus('FRED', 'error', 'Invalid response format');
+                    return false;
                 }
             } catch (error) {
-                apiTestDiv.innerHTML += `<div style="color: red;">Error: ${error.message}</div>`;
+                updateApiStatus('FRED', 'error', `Connection failed: ${error.message}`);
+                return false;
+            }
+        }
+
+        // Test Nasdaq API connection
+        async function testNasdaqConnection() {
+            try {
+                const response = await fetch(`https://data.nasdaq.com/api/v3/datasets/FRED/FEDFUNDS.json?api_key=${NASDAQ_API_KEY}`);
+                const data = await response.json();
+                if (data.dataset) {
+                    updateApiStatus('Nasdaq', 'success', 'Connection successful');
+                    return true;
+                } else {
+                    updateApiStatus('Nasdaq', 'error', 'Invalid response format');
+                    return false;
+                }
+            } catch (error) {
+                updateApiStatus('Nasdaq', 'error', `Connection failed: ${error.message}`);
+                return false;
+            }
+        }
+
+        // Test News API connection
+        async function testNewsConnection() {
+            try {
+                const response = await fetch(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${NEWS_API_KEY}`);
+                const data = await response.json();
+                if (data.articles) {
+                    updateApiStatus('News API', 'success', 'Connection successful');
+                    return true;
+                } else {
+                    updateApiStatus('News API', 'error', 'Invalid response format');
+                    return false;
+                }
+            } catch (error) {
+                updateApiStatus('News API', 'error', `Connection failed: ${error.message}`);
+                return false;
             }
         }
 
@@ -790,7 +872,7 @@
             // Calculate risk metrics
             const yieldCurveSlope = data.treasury10Y - data.treasury2Y;
             const riskScore = calculateRiskScore(data);
-            const riskStatus = determineRiskStatus(riskScore, yieldCurveSlope);
+            const riskStatus = determineRiskStatus(riskScore, yieldCurveSlope, data);
 
             // Update UI
             document.getElementById('status').textContent = riskStatus;
@@ -813,16 +895,53 @@
         }
 
         function calculateRiskScore(data) {
+            // Yield Curve Component (40% weight)
             const yieldCurveComponent = ((data.treasury10Y - data.treasury2Y) + 2) * 25;
+            
+            // High Yield Spread Component (30% weight)
             const highYieldComponent = (data.highYieldSpread / 10) * 100;
+            
+            // Corporate Spread Component (30% weight)
             const corporateComponent = ((data.corporateYield - data.treasury10Y) / 5) * 100;
-            return (yieldCurveComponent * 0.4 + highYieldComponent * 0.3 + corporateComponent * 0.3);
+            
+            // Market Volatility Component (20% weight)
+            const volatilityComponent = data.vix ? (100 - (data.vix / 40) * 100) : 50;
+            
+            // Market Trend Component (20% weight)
+            const marketTrendComponent = data.spy ? ((data.spy - data.spyPrevious) / data.spyPrevious) * 100 : 0;
+            
+            // Calculate final risk score with all components
+            return (
+                yieldCurveComponent * 0.4 +
+                highYieldComponent * 0.3 +
+                corporateComponent * 0.3 +
+                volatilityComponent * 0.2 +
+                marketTrendComponent * 0.2
+            );
         }
 
-        function determineRiskStatus(riskScore, yieldCurveSlope) {
-            if (riskScore > 70 && yieldCurveSlope > 0) return 'Risk On';
-            if (riskScore < 30 || yieldCurveSlope < 0) return 'Risk Off';
-            return 'Neutral';
+        function determineRiskStatus(riskScore, yieldCurveSlope, marketData) {
+            // Base risk status on score and yield curve
+            let baseStatus = 'Neutral';
+            if (riskScore > 70 && yieldCurveSlope > 0) baseStatus = 'Risk On';
+            if (riskScore < 30 || yieldCurveSlope < 0) baseStatus = 'Risk Off';
+            
+            // Adjust for market volatility
+            if (marketData.vix > 25) {
+                baseStatus = 'Risk Off';
+            } else if (marketData.vix < 15) {
+                baseStatus = 'Risk On';
+            }
+            
+            // Adjust for pre-market activity
+            if (isPreMarket()) {
+                const preMarketChange = ((marketData.spy - marketData.spyPrevious) / marketData.spyPrevious) * 100;
+                if (Math.abs(preMarketChange) > 1) {
+                    baseStatus = preMarketChange > 0 ? 'Risk On' : 'Risk Off';
+                }
+            }
+            
+            return baseStatus;
         }
 
         function updateYieldCurveChart() {
@@ -1260,9 +1379,103 @@
             }
         }
 
+        // Market data storage
+        const MARKET_DATA = {
+            endOfDay: null,
+            preMarket: null,
+            lastUpdate: null
+        };
+
+        // Market hours constants
+        const MARKET_HOURS = {
+            PRE_MARKET_START: 4, // 4:00 AM ET
+            MARKET_OPEN: 9.5,    // 9:30 AM ET
+            MARKET_CLOSE: 16,    // 4:00 PM ET
+            PRE_MARKET_END: 9.5  // 9:30 AM ET
+        };
+
+        async function collectEndOfDayData() {
+            try {
+                Logger.log('Collecting end of day data...', 'info');
+                const marketData = await fetchMarketData();
+                MARKET_DATA.endOfDay = {
+                    ...marketData,
+                    timestamp: new Date().toISOString()
+                };
+                Logger.log('End of day data collected successfully', 'success');
+            } catch (error) {
+                Logger.log(`Error collecting end of day data: ${error.message}`, 'error');
+            }
+        }
+
+        async function collectPreMarketData() {
+            try {
+                Logger.log('Collecting pre-market data...', 'info');
+                const marketData = await fetchMarketData();
+                MARKET_DATA.preMarket = {
+                    ...marketData,
+                    timestamp: new Date().toISOString()
+                };
+                Logger.log('Pre-market data collected successfully', 'success');
+            } catch (error) {
+                Logger.log(`Error collecting pre-market data: ${error.message}`, 'error');
+            }
+        }
+
+        function isEndOfDay() {
+            const now = new Date();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+            return hour === MARKET_HOURS.MARKET_CLOSE && minute >= 0 && minute < 5;
+        }
+
+        function isPreMarketStart() {
+            const now = new Date();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+            return hour === MARKET_HOURS.PRE_MARKET_START && minute >= 0 && minute < 5;
+        }
+
+        // Update the setupUpdateIntervals function
+        function setupUpdateIntervals() {
+            // Update market status every minute
+            setInterval(updateMarketStatus, 60 * 1000);
+            updateMarketStatus();
+
+            // Check for end of day data collection
+            setInterval(() => {
+                if (isEndOfDay()) {
+                    collectEndOfDayData();
+                }
+            }, 60 * 1000);
+
+            // Check for pre-market data collection
+            setInterval(() => {
+                if (isPreMarketStart()) {
+                    collectPreMarketData();
+                }
+            }, 60 * 1000);
+
+            // Regular market hours updates
+            setInterval(() => {
+                if (isMarketOpen()) {
+                    updateAllData();
+                }
+            }, isPreMarket() ? UPDATE_INTERVALS.PREMARKET : UPDATE_INTERVALS.REGULAR);
+        }
+
+        // Update the market indicators display
         function updateMarketIndicators(data) {
             const indicatorsDiv = document.getElementById('marketIndicators');
             if (!indicatorsDiv) return;
+
+            // Calculate pre-market change if we have pre-market data
+            const preMarketChange = MARKET_DATA.preMarket ? 
+                ((data.spy - MARKET_DATA.preMarket.spy) / MARKET_DATA.preMarket.spy) * 100 : 0;
+
+            // Calculate day-over-day change if we have end of day data
+            const dayOverDayChange = MARKET_DATA.endOfDay ?
+                ((data.spy - MARKET_DATA.endOfDay.spy) / MARKET_DATA.endOfDay.spy) * 100 : 0;
 
             indicatorsDiv.innerHTML = `
                 <div class="market-grid">
@@ -1270,22 +1483,53 @@
                         <h3>VIX</h3>
                         <p class="value">${data.vix.toFixed(2)}</p>
                         <p class="description">Volatility Index</p>
+                        <p class="trend ${data.vix > 20 ? 'risk-off' : 'risk-on'}">
+                            ${data.vix > 20 ? 'High Volatility' : 'Low Volatility'}
+                        </p>
                     </div>
                     <div class="market-card">
                         <h3>SPY</h3>
                         <p class="value">$${data.spy.toFixed(2)}</p>
                         <p class="description">S&P 500 ETF</p>
+                        ${isPreMarket() && MARKET_DATA.preMarket ? `
+                            <p class="pre-market ${preMarketChange >= 0 ? 'positive' : 'negative'}">
+                                Pre-market: ${preMarketChange >= 0 ? '+' : ''}${preMarketChange.toFixed(2)}%
+                            </p>
+                        ` : ''}
+                        ${MARKET_DATA.endOfDay ? `
+                            <p class="day-change ${dayOverDayChange >= 0 ? 'positive' : 'negative'}">
+                                Day Change: ${dayOverDayChange >= 0 ? '+' : ''}${dayOverDayChange.toFixed(2)}%
+                            </p>
+                        ` : ''}
                     </div>
                     <div class="market-card">
                         <h3>Gold Futures</h3>
                         <p class="value">$${data.gold.toFixed(2)}</p>
                         <p class="description">GC Futures</p>
+                        <p class="trend ${data.gold > (MARKET_DATA.endOfDay?.gold || 0) ? 'risk-off' : 'risk-on'}">
+                            ${data.gold > (MARKET_DATA.endOfDay?.gold || 0) ? 'Risk Off' : 'Risk On'}
+                        </p>
                     </div>
                     <div class="market-card">
                         <h3>DXY</h3>
                         <p class="value">${data.dxy.toFixed(2)}</p>
                         <p class="description">Dollar Index</p>
+                        <p class="trend ${data.dxy > (MARKET_DATA.endOfDay?.dxy || 0) ? 'risk-off' : 'risk-on'}">
+                            ${data.dxy > (MARKET_DATA.endOfDay?.dxy || 0) ? 'Risk Off' : 'Risk On'}
+                        </p>
                     </div>
+                </div>
+                <div class="risk-analysis">
+                    <h3>Market Risk Analysis</h3>
+                    <p>Current Risk Status: <strong>${determineRiskStatus(calculateRiskScore(data), data.treasury10Y - data.treasury2Y, data)}</strong></p>
+                    <p>Market Hours: ${isPreMarket() ? 'Pre-Market' : isMarketOpen() ? 'Regular Hours' : 'Closed'}</p>
+                    <p>Next Update: ${isPreMarket() ? '5' : '15'} minutes</p>
+                    ${MARKET_DATA.endOfDay ? `
+                        <p>Last EOD Update: ${new Date(MARKET_DATA.endOfDay.timestamp).toLocaleString()}</p>
+                    ` : ''}
+                    ${MARKET_DATA.preMarket ? `
+                        <p>Last Pre-market Update: ${new Date(MARKET_DATA.preMarket.timestamp).toLocaleString()}</p>
+                    ` : ''}
                 </div>
             `;
         }
@@ -1325,20 +1569,6 @@
             `;
         }
 
-        // Set up update intervals
-        function setupUpdateIntervals() {
-            // Update market status every minute
-            setInterval(updateMarketStatus, 60 * 1000);
-            updateMarketStatus();
-
-            // Set up data updates based on market hours
-            setInterval(() => {
-                if (isMarketOpen()) {
-                    updateAllData();
-                }
-            }, isPreMarket() ? UPDATE_INTERVALS.PREMARKET : UPDATE_INTERVALS.REGULAR);
-        }
-
         // Initialize
         setupUpdateIntervals();
         updateAllData();
@@ -1364,6 +1594,107 @@
 
         // Initialize logging display
         displayLogs();
+
+        // Add API test results display
+        function displayApiTestResults(results) {
+            const apiTestDiv = document.getElementById('apiTest');
+            apiTestDiv.innerHTML = `
+                <h3>API Connection Status</h3>
+                <div class="api-test-results">
+                    ${Object.entries(results).map(([api, status]) => `
+                        <div class="api-test-item ${status.success ? 'success' : 'error'}">
+                            <h4>${api}</h4>
+                            <p>Status: ${status.success ? '✅ Connected' : '❌ Failed'}</p>
+                            <p>Message: ${status.message}</p>
+                            ${status.data ? `<p>Data: ${JSON.stringify(status.data)}</p>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Comprehensive API test function
+        async function testAllApis() {
+            const results = {
+                FRED: { success: false, message: 'Testing...' },
+                Nasdaq: { success: false, message: 'Testing...' },
+                News: { success: false, message: 'Testing...' }
+            };
+
+            try {
+                // Test FRED API
+                const fredResponse = await fetch(`https://api.stlouisfed.org/fred/series?series_id=FEDFUNDS&api_key=${FRED_API_KEY}&file_type=json`);
+                const fredData = await fredResponse.json();
+                results.FRED = {
+                    success: !!fredData.seriess,
+                    message: fredData.seriess ? 'Successfully connected to FRED API' : 'Invalid response from FRED API',
+                    data: fredData.seriess ? { name: fredData.seriess[0].title } : null
+                };
+
+                // Test Nasdaq API
+                const nasdaqResponse = await fetch(`https://data.nasdaq.com/api/v3/datasets/FRED/FEDFUNDS.json?api_key=${NASDAQ_API_KEY}`);
+                const nasdaqData = await nasdaqResponse.json();
+                results.Nasdaq = {
+                    success: !!nasdaqData.dataset,
+                    message: nasdaqData.dataset ? 'Successfully connected to Nasdaq API' : 'Invalid response from Nasdaq API',
+                    data: nasdaqData.dataset ? { name: nasdaqData.dataset.name } : null
+                };
+
+                // Test News API
+                const newsResponse = await fetch(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${NEWS_API_KEY}`);
+                const newsData = await newsResponse.json();
+                results.News = {
+                    success: !!newsData.articles,
+                    message: newsData.articles ? 'Successfully connected to News API' : 'Invalid response from News API',
+                    data: newsData.articles ? { count: newsData.articles.length } : null
+                };
+
+            } catch (error) {
+                Logger.log(`Error testing APIs: ${error.message}`, 'error');
+            }
+
+            displayApiTestResults(results);
+            return results;
+        }
+
+        // Add test button to the UI
+        document.querySelector('.container').insertAdjacentHTML('afterbegin', `
+            <button class="refresh-button" onclick="testAllApis()" style="background-color: #2196F3;">
+                Test All API Connections
+            </button>
+        `);
+
+        // Add styles for API test results
+        const style = document.createElement('style');
+        style.textContent = `
+            .api-test-results {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 20px;
+                margin: 20px 0;
+            }
+            .api-test-item {
+                padding: 15px;
+                border-radius: 8px;
+                background: white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .api-test-item.success {
+                border-left: 4px solid #4CAF50;
+            }
+            .api-test-item.error {
+                border-left: 4px solid #f44336;
+            }
+            .api-test-item h4 {
+                margin: 0 0 10px 0;
+                color: #333;
+            }
+            .api-test-item p {
+                margin: 5px 0;
+                color: #666;
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html> 
