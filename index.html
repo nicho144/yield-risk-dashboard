@@ -320,6 +320,32 @@
             background: #e3f2fd;
             z-index: 1000;
         }
+        .api-test-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .api-test-item {
+            padding: 15px;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .api-test-item.success {
+            border-left: 4px solid #4CAF50;
+        }
+        .api-test-item.error {
+            border-left: 4px solid #f44336;
+        }
+        .api-test-item h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .api-test-item p {
+            margin: 5px 0;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -327,9 +353,7 @@
         <h1>Yield Risk Dashboard</h1>
         
         <button class="refresh-button" onclick="fetchLatestData()">Refresh Data</button>
-        <button class="refresh-button" onclick="testFredConnection()" style="background-color: #2196F3;">Test FRED Connection</button>
-        <button class="refresh-button" onclick="testNasdaqConnection()" style="background-color: #2196F3;">Test Nasdaq Connection</button>
-        <button class="refresh-button" onclick="testNewsConnection()" style="background-color: #2196F3;">Test News API Connection</button>
+        <button class="refresh-button" onclick="testAllApis()" style="background-color: #2196F3;">Test All API Connections</button>
         <div id="loading" class="loading">Loading latest market data...</div>
         <div id="error" class="error-message"></div>
         <div id="lastUpdated" class="last-updated"></div>
@@ -1570,6 +1594,107 @@
 
         // Initialize logging display
         displayLogs();
+
+        // Add API test results display
+        function displayApiTestResults(results) {
+            const apiTestDiv = document.getElementById('apiTest');
+            apiTestDiv.innerHTML = `
+                <h3>API Connection Status</h3>
+                <div class="api-test-results">
+                    ${Object.entries(results).map(([api, status]) => `
+                        <div class="api-test-item ${status.success ? 'success' : 'error'}">
+                            <h4>${api}</h4>
+                            <p>Status: ${status.success ? '✅ Connected' : '❌ Failed'}</p>
+                            <p>Message: ${status.message}</p>
+                            ${status.data ? `<p>Data: ${JSON.stringify(status.data)}</p>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Comprehensive API test function
+        async function testAllApis() {
+            const results = {
+                FRED: { success: false, message: 'Testing...' },
+                Nasdaq: { success: false, message: 'Testing...' },
+                News: { success: false, message: 'Testing...' }
+            };
+
+            try {
+                // Test FRED API
+                const fredResponse = await fetch(`https://api.stlouisfed.org/fred/series?series_id=FEDFUNDS&api_key=${FRED_API_KEY}&file_type=json`);
+                const fredData = await fredResponse.json();
+                results.FRED = {
+                    success: !!fredData.seriess,
+                    message: fredData.seriess ? 'Successfully connected to FRED API' : 'Invalid response from FRED API',
+                    data: fredData.seriess ? { name: fredData.seriess[0].title } : null
+                };
+
+                // Test Nasdaq API
+                const nasdaqResponse = await fetch(`https://data.nasdaq.com/api/v3/datasets/FRED/FEDFUNDS.json?api_key=${NASDAQ_API_KEY}`);
+                const nasdaqData = await nasdaqResponse.json();
+                results.Nasdaq = {
+                    success: !!nasdaqData.dataset,
+                    message: nasdaqData.dataset ? 'Successfully connected to Nasdaq API' : 'Invalid response from Nasdaq API',
+                    data: nasdaqData.dataset ? { name: nasdaqData.dataset.name } : null
+                };
+
+                // Test News API
+                const newsResponse = await fetch(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${NEWS_API_KEY}`);
+                const newsData = await newsResponse.json();
+                results.News = {
+                    success: !!newsData.articles,
+                    message: newsData.articles ? 'Successfully connected to News API' : 'Invalid response from News API',
+                    data: newsData.articles ? { count: newsData.articles.length } : null
+                };
+
+            } catch (error) {
+                Logger.log(`Error testing APIs: ${error.message}`, 'error');
+            }
+
+            displayApiTestResults(results);
+            return results;
+        }
+
+        // Add test button to the UI
+        document.querySelector('.container').insertAdjacentHTML('afterbegin', `
+            <button class="refresh-button" onclick="testAllApis()" style="background-color: #2196F3;">
+                Test All API Connections
+            </button>
+        `);
+
+        // Add styles for API test results
+        const style = document.createElement('style');
+        style.textContent = `
+            .api-test-results {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 20px;
+                margin: 20px 0;
+            }
+            .api-test-item {
+                padding: 15px;
+                border-radius: 8px;
+                background: white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .api-test-item.success {
+                border-left: 4px solid #4CAF50;
+            }
+            .api-test-item.error {
+                border-left: 4px solid #f44336;
+            }
+            .api-test-item h4 {
+                margin: 0 0 10px 0;
+                color: #333;
+            }
+            .api-test-item p {
+                margin: 5px 0;
+                color: #666;
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html> 
