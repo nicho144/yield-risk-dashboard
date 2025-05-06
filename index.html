@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yield Risk Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .risk-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .risk-on {
+            background-color: #e8f5e9;
+        }
+        .risk-off {
+            background-color: #ffebee;
+        }
+        .neutral {
+            background-color: #fff3e0;
+        }
+        .input-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .input-field {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+        .refresh-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .refresh-button:hover {
+            background-color: #45a049;
+        }
+        .loading {
+            display: none;
+            margin: 20px 0;
+            color: #666;
+        }
+        .error-message {
+            color: #d32f2f;
+            margin: 10px 0;
+            display: none;
+        }
+        .last-updated {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        .rate-change {
+            font-weight: bold;
+        }
+        .rate-up {
+            color: #d32f2f;
+        }
+        .rate-down {
+            color: #2e7d32;
+        }
+        .analysis-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        .curve-analysis {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .steepener {
+            background-color: #e8f5e9;
+            border: 1px solid #2e7d32;
+        }
+        .flattener {
+            background-color: #ffebee;
+            border: 1px solid #d32f2f;
+        }
+        .implied-rate {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #2196f3;
+        }
+        .rate-comparison {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .rate-box {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .futures-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .probability-bar {
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+        .probability-fill {
+            height: 100%;
+            background: #2196f3;
+            transition: width 0.3s ease;
+        }
+        .contract-box {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .contract-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .contract-name {
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .contract-date {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .historical-analysis {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .correlation-matrix {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            margin: 15px 0;
+        }
+        .correlation-cell {
+            padding: 8px;
+            text-align: center;
+            background: white;
+            border: 1px solid #ddd;
+        }
+        .correlation-header {
+            font-weight: bold;
+            background: #e3f2fd;
+        }
+        .probability-scenarios {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .scenario-group {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .historical-chart {
+            height: 200px;
+            margin: 15px 0;
+        }
+        .log-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        .log-entry {
+            padding: 5px;
+            margin: 2px 0;
+            border-radius: 2px;
+            font-size: 12px;
+        }
+        .log-entry.error {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+        .log-entry.warning {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        .log-entry.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .log-time {
+            color: #666;
+            margin-right: 10px;
+        }
+        .market-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .market-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .market-card h3 {
+            margin: 0;
+            color: #1976d2;
+        }
+        .market-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .market-card .description {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .high-volatility {
+            background: #ffebee;
+            border: 1px solid #d32f2f;
+        }
+        .low-volatility {
+            background: #e8f5e9;
+            border: 1px solid #2e7d32;
+        }
+        .market-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            background: #e3f2fd;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Yield Risk Dashboard</h1>
+        
+        <button class="refresh-button" onclick="fetchLatestData()">Refresh Data</button>
+        <button class="refresh-button" onclick="testFredConnection()" style="background-color: #2196F3;">Test FRED Connection</button>
+        <div id="loading" class="loading">Loading latest market data...</div>
+        <div id="error" class="error-message"></div>
+        <div id="lastUpdated" class="last-updated"></div>
+        <div id="apiTest" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;"></div>
+        
+        <div id="riskStatus" class="risk-status neutral">
+            <h2>Current Risk Status: <span id="status">Neutral</span></h2>
+            <div>Risk Score: <span id="riskScore">0</span>%</div>
+            <div>Yield Curve Slope: <span id="slope">0</span>%</div>
+        </div>
+
+        <div class="card">
+            <h2>Yield Inputs</h2>
+            <div class="input-group">
+                <div class="input-field">
+                    <label>Fed Funds Rate (%)</label>
+                    <input type="number" id="fedFunds" onchange="updateCalculations()">
+                </div>
+                <div class="input-field">
+                    <label>2Y Treasury (%)</label>
+                    <input type="number" id="treasury2Y" onchange="updateCalculations()">
+                </div>
+                <div class="input-field">
+                    <label>5Y Treasury (%)</label>
+                    <input type="number" id="treasury5Y" onchange="updateCalculations()">
+                </div>
+                <div class="input-field">
+                    <label>10Y Treasury (%)</label>
+                    <input type="number" id="treasury10Y" onchange="updateCalculations()">
+                </div>
+                <div class="input-field">
+                    <label>30Y Treasury (%)</label>
+                    <input type="number" id="treasury30Y" onchange="updateCalculations()">
+                </div>
+                <div class="input-field">
+                    <label>Corporate Yield (%)</label>
+                    <input type="number" id="corporateYield" onchange="updateCalculations()">
+                </div>
+                <div class="input-field">
+                    <label>High Yield Spread (%)</label>
+                    <input type="number" id="highYieldSpread" onchange="updateCalculations()">
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Yield Curve</h2>
+            <div class="chart-container">
+                <canvas id="yieldCurveChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Historical Data</h2>
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Fed Funds</th>
+                        <th>2Y</th>
+                        <th>5Y</th>
+                        <th>10Y</th>
+                        <th>30Y</th>
+                        <th>Corp Yield</th>
+                        <th>HY Spread</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="analysis-card">
+            <h2>Yield Curve Analysis</h2>
+            <div id="yieldAnalysis"></div>
+        </div>
+
+        <div class="analysis-card">
+            <h2>Fed Funds Analysis</h2>
+            <div id="fedFundsAnalysis"></div>
+        </div>
+
+        <div class="card">
+            <h2>Market Indicators</h2>
+        </div>
+    </div>
+
+    <div id="marketIndicators"></div>
+    <div id="marketStatus"></div>
+
+    <script>
+        let historicalData = [];
+        let yieldCurveChart;
+        const FRED_API_KEY = 'dceb19d6ccadfb4115c3ac2493b7d5ed';
+        const NASDAQ_API_KEY = 'XLTzbBjvffmrseg66XsR';
+
+        // FRED Series IDs with descriptions
+        const FRED_SERIES = {
+            FEDFUNDS: {
+                id: 'FEDFUNDS',
+                name: 'Federal Funds Rate',
+                description: 'Effective Federal Funds Rate'
+            },
+            DGS2: {
+                id: 'DGS2',
+                name: '2-Year Treasury',
+                description: '2-Year Treasury Constant Maturity Rate'
+            },
+            DGS5: {
+                id: 'DGS5',
+                name: '5-Year Treasury',
+                description: '5-Year Treasury Constant Maturity Rate'
+            },
+            DGS10: {
+                id: 'DGS10',
+                name: '10-Year Treasury',
+                description: '10-Year Treasury Constant Maturity Rate'
+            },
+            DGS30: {
+                id: 'DGS30',
+                name: '30-Year Treasury',
+                description: '30-Year Treasury Constant Maturity Rate'
+            },
+            BAA: {
+                id: 'BAA',
+                name: 'Corporate Bond Yield',
+                description: "Moody's Seasoned Baa Corporate Bond Yield"
+            },
+            BAMLH0A0HYM2: {
+                id: 'BAMLH0A0HYM2',
+                name: 'High Yield Spread',
+                description: 'ICE BofA US High Yield Index Option-Adjusted Spread'
+            },
+            ZQ: {
+                id: 'ZQ',
+                name: '1-Month Fed Funds Futures',
+                description: '30-Day Fed Funds Futures'
+            },
+            ZQ3: {
+                id: 'ZQ3',
+                name: '3-Month Fed Funds Futures',
+                description: '90-Day Fed Funds Futures'
+            },
+            ZQ6: {
+                id: 'ZQ6',
+                name: '6-Month Fed Funds Futures',
+                description: '180-Day Fed Funds Futures'
+            },
+            ZQ12: {
+                id: 'ZQ12',
+                name: '12-Month Fed Funds Futures',
+                description: '360-Day Fed Funds Futures'
+            }
+        };
+
+        // API Configuration
+        const API_CONFIG = {
+            FRED: {
+                baseUrl: 'https://api.stlouisfed.org/fred',
+                rateLimit: 120, // requests per minute
+                retryDelay: 1000, // ms
+                maxRetries: 3
+            },
+            NASDAQ: {
+                baseUrl: 'https://data.nasdaq.com/api/v3',
+                rateLimit: 50, // requests per minute
+                retryDelay: 1000, // ms
+                maxRetries: 3
+            }
+        };
+
+        // Nasdaq Data Sources
+        const NASDAQ_SERIES = {
+            FEDFUNDS: {
+                dataset: 'FRED/FEDFUNDS',
+                name: 'Federal Funds Rate',
+                description: 'Effective Federal Funds Rate'
+            },
+            TREASURY: {
+                dataset: 'USTREASURY/YIELD',
+                name: 'Treasury Yields',
+                description: 'Daily Treasury Yield Curve Rates'
+            },
+            CORPORATE: {
+                dataset: 'ML/AAAEY',
+                name: 'Corporate Bond Yields',
+                description: 'Moody\'s Seasoned Corporate Bond Yields'
+            },
+            HIGH_YIELD: {
+                dataset: 'ML/USEY',
+                name: 'High Yield Spreads',
+                description: 'ICE BofA US High Yield Index Option-Adjusted Spread'
+            }
+        };
+
+        // Additional Market Data Sources
+        const MARKET_SERIES = {
+            VIX: {
+                dataset: 'CBOE/VIX',
+                name: 'VIX Index',
+                description: 'CBOE Volatility Index'
+            },
+            SPY: {
+                dataset: 'EOD/SPY',
+                name: 'SPDR S&P 500 ETF',
+                description: 'SPY ETF Price'
+            },
+            GOLD: {
+                dataset: 'CME/GC',
+                name: 'Gold Futures',
+                description: 'Gold Futures Price'
+            },
+            DXY: {
+                dataset: 'ICE/DX',
+                name: 'US Dollar Index',
+                description: 'Dollar Index Futures'
+            },
+            BONDS: {
+                dataset: 'USTREASURY/YIELD',
+                name: 'Treasury Bonds',
+                description: 'Treasury Bond Yields'
+            }
+        };
+
+        // Update intervals (in milliseconds)
+        const UPDATE_INTERVALS = {
+            PREMARKET: 5 * 60 * 1000,  // 5 minutes
+            REGULAR: 15 * 60 * 1000,   // 15 minutes
+            DAILY: 24 * 60 * 60 * 1000 // 24 hours
+        };
+
+        // Logging utility
+        const Logger = {
+            logs: [],
+            maxLogs: 100,
+            
+            log: function(message, type = 'info') {
+                const timestamp = new Date().toISOString();
+                const logEntry = { timestamp, message, type };
+                this.logs.unshift(logEntry);
+                if (this.logs.length > this.maxLogs) {
+                    this.logs.pop();
+                }
+                console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
+            },
+
+            getLogs: function() {
+                return this.logs;
+            },
+
+            clearLogs: function() {
+                this.logs = [];
+            }
+        };
+
+        // Data validation utility
+        const Validator = {
+            validateFredData: function(data) {
+                if (!data || !data.observations || !Array.isArray(data.observations)) {
+                    throw new Error('Invalid FRED data format');
+                }
+                return data.observations.every(obs => 
+                    obs.date && !isNaN(parseFloat(obs.value))
+                );
+            },
+
+            validateNasdaqData: function(data) {
+                if (!data || !data.dataset_data || !data.dataset_data.data) {
+                    throw new Error('Invalid Nasdaq data format');
+                }
+                return data.dataset_data.data.every(row => 
+                    Array.isArray(row) && row.length >= 2 && !isNaN(parseFloat(row[1]))
+                );
+            }
+        };
+
+        // Rate limiter utility
+        const RateLimiter = {
+            requests: {},
+            
+            canMakeRequest: function(api) {
+                const now = Date.now();
+                const config = API_CONFIG[api];
+                if (!this.requests[api]) {
+                    this.requests[api] = [];
+                }
+                
+                // Remove old requests
+                this.requests[api] = this.requests[api].filter(
+                    time => now - time < 60000
+                );
+                
+                return this.requests[api].length < config.rateLimit;
+            },
+            
+            addRequest: function(api) {
+                if (!this.requests[api]) {
+                    this.requests[api] = [];
+                }
+                this.requests[api].push(Date.now());
+            }
+        };
+
+        async function fetchWithRetry(url, api, retries = 0) {
+            if (!RateLimiter.canMakeRequest(api)) {
+                Logger.log(`Rate limit reached for ${api}, waiting...`, 'warning');
+                await new Promise(resolve => 
+                    setTimeout(resolve, API_CONFIG[api].retryDelay)
+                );
+                return fetchWithRetry(url, api, retries);
+            }
+
+            try {
+                RateLimiter.addRequest(api);
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                Logger.log(`Successfully fetched data from ${url}`, 'success');
+                return data;
+            } catch (error) {
+                if (retries < API_CONFIG[api].maxRetries) {
+                    Logger.log(`Retry attempt ${retries + 1} for ${url}`, 'warning');
+                    await new Promise(resolve => 
+                        setTimeout(resolve, API_CONFIG[api].retryDelay)
+                    );
+                    return fetchWithRetry(url, api, retries + 1);
+                }
+                throw error;
+            }
+        }
+
+        async function fetchFredData(seriesId, days = 1) {
+            const url = `${API_CONFIG.FRED.baseUrl}/series/observations?` +
+                `series_id=${seriesId}&` +
+                `api_key=${FRED_API_KEY}&` +
+                `file_type=json&` +
+                `sort_order=desc&` +
+                `limit=${days + 1}`;
+
+            try {
+                const data = await fetchWithRetry(url, 'FRED');
+                Validator.validateFredData(data);
+                
+                if (!data.observations || data.observations.length < 2) {
+                    throw new Error(`Insufficient data available for ${seriesId}`);
+                }
+
+                return {
+                    current: parseFloat(data.observations[0].value),
+                    previous: parseFloat(data.observations[1].value),
+                    date: data.observations[0].date,
+                    previousDate: data.observations[1].date
+                };
+            } catch (error) {
+                Logger.log(`Error fetching FRED data for ${seriesId}: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        async function fetchNasdaqData(dataset, params = {}) {
+            const url = `${API_CONFIG.NASDAQ.baseUrl}/datasets/${dataset}?` +
+                `api_key=${NASDAQ_API_KEY}&` +
+                Object.entries(params)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join('&');
+
+            try {
+                const data = await fetchWithRetry(url, 'NASDAQ');
+                Validator.validateNasdaqData(data);
+                return data;
+            } catch (error) {
+                Logger.log(`Error fetching Nasdaq data for ${dataset}: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        async function fetchLatestData() {
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            
+            try {
+                loadingDiv.style.display = 'block';
+                errorDiv.style.display = 'none';
+                Logger.log('Starting data fetch...', 'info');
+
+                // Fetch FRED data
+                const fredData = await Promise.all([
+                    fetchFredData(FRED_SERIES.FEDFUNDS.id),
+                    fetchFredData(FRED_SERIES.DGS2.id),
+                    fetchFredData(FRED_SERIES.DGS5.id),
+                    fetchFredData(FRED_SERIES.DGS10.id),
+                    fetchFredData(FRED_SERIES.DGS30.id),
+                    fetchFredData(FRED_SERIES.BAA.id),
+                    fetchFredData(FRED_SERIES.BAMLH0A0HYM2.id)
+                ]);
+
+                // Fetch Nasdaq data
+                const nasdaqData = await Promise.all([
+                    fetchNasdaqData(NASDAQ_SERIES.TREASURY.dataset, { limit: 1 }),
+                    fetchNasdaqData(NASDAQ_SERIES.CORPORATE.dataset, { limit: 1 }),
+                    fetchNasdaqData(NASDAQ_SERIES.HIGH_YIELD.dataset, { limit: 1 })
+                ]);
+
+                // Update input fields with real data
+                document.getElementById('fedFunds').value = fredData[0].current.toFixed(2);
+                document.getElementById('treasury2Y').value = fredData[1].current.toFixed(2);
+                document.getElementById('treasury5Y').value = fredData[2].current.toFixed(2);
+                document.getElementById('treasury10Y').value = fredData[3].current.toFixed(2);
+                document.getElementById('treasury30Y').value = fredData[4].current.toFixed(2);
+                document.getElementById('corporateYield').value = fredData[5].current.toFixed(2);
+                document.getElementById('highYieldSpread').value = fredData[6].current.toFixed(2);
+
+                // Update last updated timestamp
+                const lastUpdated = new Date().toLocaleString();
+                document.getElementById('lastUpdated').textContent = 
+                    `Last updated: ${lastUpdated}`;
+                Logger.log(`Data updated at ${lastUpdated}`, 'success');
+
+                // Update all analyses
+                await Promise.all([
+                    updateCalculations(),
+                    updateYieldAnalysis(),
+                    updateFedFundsAnalysis()
+                ]);
+
+            } catch (error) {
+                const errorMessage = `Error fetching data: ${error.message}`;
+                errorDiv.textContent = errorMessage;
+                errorDiv.style.display = 'block';
+                Logger.log(errorMessage, 'error');
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        async function testFredConnection() {
+            const apiTestDiv = document.getElementById('apiTest');
+            apiTestDiv.innerHTML = '<h3>Testing FRED API Connection...</h3>';
+            
+            try {
+                // Test each series
+                for (const [key, series] of Object.entries(FRED_SERIES)) {
+                    const value = await fetchFredData(series.id);
+                    apiTestDiv.innerHTML += `
+                        <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <strong>${series.name}</strong><br>
+                            Series ID: ${series.id}<br>
+                            Description: ${series.description}<br>
+                            Latest Value: ${value.current.toFixed(2)}%<br>
+                            <a href="https://fred.stlouisfed.org/series/${series.id}" target="_blank">View on FRED</a>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                apiTestDiv.innerHTML += `<div style="color: red;">Error: ${error.message}</div>`;
+            }
+        }
+
+        function updateCalculations() {
+            Logger.log('Updating calculations...', 'info');
+            const data = {
+                date: new Date().toLocaleDateString(),
+                fedFundsRate: parseFloat(document.getElementById('fedFunds').value) || 0,
+                treasury2Y: parseFloat(document.getElementById('treasury2Y').value) || 0,
+                treasury5Y: parseFloat(document.getElementById('treasury5Y').value) || 0,
+                treasury10Y: parseFloat(document.getElementById('treasury10Y').value) || 0,
+                treasury30Y: parseFloat(document.getElementById('treasury30Y').value) || 0,
+                corporateYield: parseFloat(document.getElementById('corporateYield').value) || 0,
+                highYieldSpread: parseFloat(document.getElementById('highYieldSpread').value) || 0
+            };
+
+            // Calculate risk metrics
+            const yieldCurveSlope = data.treasury10Y - data.treasury2Y;
+            const riskScore = calculateRiskScore(data);
+            const riskStatus = determineRiskStatus(riskScore, yieldCurveSlope);
+
+            // Update UI
+            document.getElementById('status').textContent = riskStatus;
+            document.getElementById('riskScore').textContent = riskScore.toFixed(2);
+            document.getElementById('slope').textContent = yieldCurveSlope.toFixed(2);
+
+            // Update risk status color
+            const riskStatusDiv = document.getElementById('riskStatus');
+            riskStatusDiv.className = 'risk-status ' + 
+                (riskStatus === 'Risk On' ? 'risk-on' : 
+                 riskStatus === 'Risk Off' ? 'risk-off' : 'neutral');
+
+            // Add to historical data
+            historicalData.push(data);
+            if (historicalData.length > 10) historicalData.shift();
+
+            // Update charts and table
+            updateYieldCurveChart();
+            updateHistoryTable();
+        }
+
+        function calculateRiskScore(data) {
+            const yieldCurveComponent = ((data.treasury10Y - data.treasury2Y) + 2) * 25;
+            const highYieldComponent = (data.highYieldSpread / 10) * 100;
+            const corporateComponent = ((data.corporateYield - data.treasury10Y) / 5) * 100;
+            return (yieldCurveComponent * 0.4 + highYieldComponent * 0.3 + corporateComponent * 0.3);
+        }
+
+        function determineRiskStatus(riskScore, yieldCurveSlope) {
+            if (riskScore > 70 && yieldCurveSlope > 0) return 'Risk On';
+            if (riskScore < 30 || yieldCurveSlope < 0) return 'Risk Off';
+            return 'Neutral';
+        }
+
+        function updateYieldCurveChart() {
+            const ctx = document.getElementById('yieldCurveChart').getContext('2d');
+            
+            if (yieldCurveChart) {
+                yieldCurveChart.destroy();
+            }
+
+            yieldCurveChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: historicalData.map(d => d.date),
+                    datasets: [
+                        {
+                            label: '2Y Treasury',
+                            data: historicalData.map(d => d.treasury2Y),
+                            borderColor: '#8884d8',
+                            fill: false
+                        },
+                        {
+                            label: '5Y Treasury',
+                            data: historicalData.map(d => d.treasury5Y),
+                            borderColor: '#82ca9d',
+                            fill: false
+                        },
+                        {
+                            label: '10Y Treasury',
+                            data: historicalData.map(d => d.treasury10Y),
+                            borderColor: '#ffc658',
+                            fill: false
+                        },
+                        {
+                            label: '30Y Treasury',
+                            data: historicalData.map(d => d.treasury30Y),
+                            borderColor: '#ff8042',
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Yield (%)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateHistoryTable() {
+            const tbody = document.querySelector('#historyTable tbody');
+            tbody.innerHTML = '';
+            
+            historicalData.forEach(data => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${data.date}</td>
+                    <td>${data.fedFundsRate.toFixed(2)}</td>
+                    <td>${data.treasury2Y.toFixed(2)}</td>
+                    <td>${data.treasury5Y.toFixed(2)}</td>
+                    <td>${data.treasury10Y.toFixed(2)}</td>
+                    <td>${data.treasury30Y.toFixed(2)}</td>
+                    <td>${data.corporateYield.toFixed(2)}</td>
+                    <td>${data.highYieldSpread.toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function calculateRateChange(current, previous) {
+            const change = current - previous;
+            const percentChange = (change / previous) * 100;
+            return {
+                value: change,
+                percent: percentChange,
+                direction: change > 0 ? 'up' : change < 0 ? 'down' : 'unchanged'
+            };
+        }
+
+        function analyzeYieldCurve(treasuryData) {
+            // Calculate 2s10s spread (10Y - 2Y)
+            const currentSpread = treasuryData.DGS10.current - treasuryData.DGS2.current;
+            const previousSpread = treasuryData.DGS10.previous - treasuryData.DGS2.previous;
+            const spreadChange = currentSpread - previousSpread;
+
+            // Determine if it's a steepener or flattener
+            const isSteepener = spreadChange > 0;
+            const curveType = isSteepener ? 'Steepener' : 'Flattener';
+
+            // Calculate overall yield changes
+            const yieldChanges = {
+                '2Y': calculateRateChange(treasuryData.DGS2.current, treasuryData.DGS2.previous),
+                '5Y': calculateRateChange(treasuryData.DGS5.current, treasuryData.DGS5.previous),
+                '10Y': calculateRateChange(treasuryData.DGS10.current, treasuryData.DGS10.previous),
+                '30Y': calculateRateChange(treasuryData.DGS30.current, treasuryData.DGS30.previous)
+            };
+
+            // Determine risk on/off based on yield curve and changes
+            const isRiskOn = currentSpread > 0 && spreadChange > 0;
+            const isRiskOff = currentSpread < 0 || spreadChange < -0.1;
+            const riskStatus = isRiskOn ? 'Risk On' : isRiskOff ? 'Risk Off' : 'Neutral';
+
+            return {
+                curveType,
+                spreadChange,
+                currentSpread,
+                yieldChanges,
+                riskStatus,
+                isSteepener
+            };
+        }
+
+        async function updateYieldAnalysis() {
+            Logger.log('Updating yield analysis...', 'info');
+            const analysisDiv = document.getElementById('yieldAnalysis');
+            
+            try {
+                // Fetch current and previous day's data
+                const treasuryData = {
+                    DGS2: await fetchFredData(FRED_SERIES.DGS2.id),
+                    DGS5: await fetchFredData(FRED_SERIES.DGS5.id),
+                    DGS10: await fetchFredData(FRED_SERIES.DGS10.id),
+                    DGS30: await fetchFredData(FRED_SERIES.DGS30.id)
+                };
+
+                const analysis = analyzeYieldCurve(treasuryData);
+
+                // Create analysis display
+                let html = `
+                    <div class="curve-analysis ${analysis.isSteepener ? 'steepener' : 'flattener'}">
+                        <h3>${analysis.curveType} Detected</h3>
+                        <p>Current 2s10s Spread: ${analysis.currentSpread.toFixed(2)}%</p>
+                        <p>Spread Change: ${analysis.spreadChange.toFixed(2)}%</p>
+                        <p>Risk Status: <strong>${analysis.riskStatus}</strong></p>
+                    </div>
+                    <h3>Rate Changes (${treasuryData.DGS2.date} vs ${treasuryData.DGS2.previousDate})</h3>
+                    <table>
+                        <tr>
+                            <th>Tenor</th>
+                            <th>Current</th>
+                            <th>Previous</th>
+                            <th>Change</th>
+                            <th>% Change</th>
+                        </tr>
+                `;
+
+                for (const [tenor, data] of Object.entries(treasuryData)) {
+                    const change = calculateRateChange(data.current, data.previous);
+                    html += `
+                        <tr>
+                            <td>${tenor.replace('DGS', '')}</td>
+                            <td>${data.current.toFixed(2)}%</td>
+                            <td>${data.previous.toFixed(2)}%</td>
+                            <td class="rate-change ${change.direction === 'up' ? 'rate-up' : 'rate-down'}">
+                                ${change.value > 0 ? '+' : ''}${change.value.toFixed(2)}%
+                            </td>
+                            <td class="rate-change ${change.direction === 'up' ? 'rate-up' : 'rate-down'}">
+                                ${change.percent > 0 ? '+' : ''}${change.percent.toFixed(2)}%
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                html += '</table>';
+                analysisDiv.innerHTML = html;
+
+            } catch (error) {
+                analysisDiv.innerHTML = `<div style="color: red;">Error analyzing yield curve: ${error.message}</div>`;
+            }
+        }
+
+        function calculateImpliedRate(futuresPrice) {
+            return 100 - futuresPrice;
+        }
+
+        function calculateProbability(impliedRate, currentRate, targetRate) {
+            // Calculate probability of rate being at or above target rate
+            const basisPoints = (impliedRate - currentRate) * 100;
+            const targetBasisPoints = (targetRate - currentRate) * 100;
+            
+            if (basisPoints >= targetBasisPoints) {
+                return 100;
+            } else if (basisPoints <= 0) {
+                return 0;
+            } else {
+                return (basisPoints / targetBasisPoints) * 100;
+            }
+        }
+
+        async function fetchHistoricalData(seriesId, days = 30) {
+            const response = await fetch(
+                `https://api.stlouisfed.org/fred/series/observations?` +
+                `series_id=${seriesId}&` +
+                `api_key=${FRED_API_KEY}&` +
+                `file_type=json&` +
+                `sort_order=desc&` +
+                `limit=${days}`
+            );
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch historical data for ${seriesId}`);
+            }
+
+            const data = await response.json();
+            return data.observations.map(obs => ({
+                date: obs.date,
+                value: parseFloat(obs.value)
+            })).reverse();
+        }
+
+        function calculateCorrelation(data1, data2) {
+            const n = Math.min(data1.length, data2.length);
+            const mean1 = data1.reduce((a, b) => a + b, 0) / n;
+            const mean2 = data2.reduce((a, b) => a + b, 0) / n;
+            
+            let numerator = 0;
+            let denominator1 = 0;
+            let denominator2 = 0;
+            
+            for (let i = 0; i < n; i++) {
+                const diff1 = data1[i] - mean1;
+                const diff2 = data2[i] - mean2;
+                numerator += diff1 * diff2;
+                denominator1 += diff1 * diff1;
+                denominator2 += diff2 * diff2;
+            }
+            
+            return numerator / Math.sqrt(denominator1 * denominator2);
+        }
+
+        async function updateFedFundsAnalysis() {
+            Logger.log('Updating Fed Funds analysis...', 'info');
+            const analysisDiv = document.getElementById('fedFundsAnalysis');
+            
+            try {
+                // Fetch current and historical data
+                const [fedFundsData, ...futuresData] = await Promise.all([
+                    fetchFredData(FRED_SERIES.FEDFUNDS.id),
+                    fetchFredData(FRED_SERIES.ZQ.id),
+                    fetchFredData(FRED_SERIES.ZQ3.id),
+                    fetchFredData(FRED_SERIES.ZQ6.id),
+                    fetchFredData(FRED_SERIES.ZQ12.id)
+                ]);
+
+                // Fetch historical data for all series
+                const historicalData = await Promise.all([
+                    fetchHistoricalData(FRED_SERIES.FEDFUNDS.id),
+                    fetchHistoricalData(FRED_SERIES.ZQ.id),
+                    fetchHistoricalData(FRED_SERIES.ZQ3.id),
+                    fetchHistoricalData(FRED_SERIES.ZQ6.id),
+                    fetchHistoricalData(FRED_SERIES.ZQ12.id)
+                ]);
+
+                const currentFedFunds = fedFundsData.current;
+                const fedFundsChange = calculateRateChange(currentFedFunds, fedFundsData.previous);
+
+                // Calculate correlation matrix
+                const seriesNames = ['Fed Funds', '1M', '3M', '6M', '12M'];
+                const correlationMatrix = [];
+                for (let i = 0; i < seriesNames.length; i++) {
+                    const row = [];
+                    for (let j = 0; j < seriesNames.length; j++) {
+                        const correlation = calculateCorrelation(
+                            historicalData[i].map(d => d.value),
+                            historicalData[j].map(d => d.value)
+                        );
+                        row.push(correlation);
+                    }
+                    correlationMatrix.push(row);
+                }
+
+                let html = `
+                    <div class="implied-rate">
+                        <h3>Fed Funds Rate Analysis</h3>
+                        <div class="rate-box">
+                            <h4>Current Fed Funds Rate</h4>
+                            <p>${currentFedFunds.toFixed(2)}%</p>
+                            <p class="rate-change ${fedFundsChange.direction === 'up' ? 'rate-up' : 'rate-down'}">
+                                ${fedFundsChange.value > 0 ? '+' : ''}${fedFundsChange.value.toFixed(2)}%
+                                (${fedFundsChange.percent > 0 ? '+' : ''}${fedFundsChange.percent.toFixed(2)}%)
+                            </p>
+                        </div>
+                        <div class="futures-grid">
+                `;
+
+                // Process each contract
+                for (const contract of futuresData) {
+                    const impliedRate = calculateImpliedRate(contract.current);
+                    const previousImpliedRate = calculateImpliedRate(contract.previous);
+                    const impliedRateChange = calculateRateChange(impliedRate, previousImpliedRate);
+                    
+                    // Calculate probabilities for both positive and negative scenarios
+                    const scenarios = [
+                        { bp: -75, prob: calculateProbability(impliedRate, currentFedFunds, currentFedFunds - 0.75) },
+                        { bp: -50, prob: calculateProbability(impliedRate, currentFedFunds, currentFedFunds - 0.50) },
+                        { bp: -25, prob: calculateProbability(impliedRate, currentFedFunds, currentFedFunds - 0.25) },
+                        { bp: 25, prob: calculateProbability(impliedRate, currentFedFunds, currentFedFunds + 0.25) },
+                        { bp: 50, prob: calculateProbability(impliedRate, currentFedFunds, currentFedFunds + 0.50) },
+                        { bp: 75, prob: calculateProbability(impliedRate, currentFedFunds, currentFedFunds + 0.75) }
+                    ];
+
+                    html += `
+                        <div class="contract-box">
+                            <div class="contract-header">
+                                <span class="contract-name">${contract.series.name}</span>
+                                <span class="contract-date">${contract.date}</span>
+                            </div>
+                            <p>Implied Rate: ${impliedRate.toFixed(2)}%</p>
+                            <p class="rate-change ${impliedRateChange.direction === 'up' ? 'rate-up' : 'rate-down'}">
+                                ${impliedRateChange.value > 0 ? '+' : ''}${impliedRateChange.value.toFixed(2)}%
+                                (${impliedRateChange.percent > 0 ? '+' : ''}${impliedRateChange.percent.toFixed(2)}%)
+                            </p>
+                            <h5>Rate Change Probabilities</h5>
+                            <div class="probability-scenarios">
+                                <div class="scenario-group">
+                                    <h6>Rate Decreases</h6>
+                                    ${scenarios.filter(s => s.bp < 0).map(s => `
+                                        <p>${s.bp}bp: ${s.prob.toFixed(1)}%</p>
+                                        <div class="probability-bar">
+                                            <div class="probability-fill" style="width: ${s.prob}%"></div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="scenario-group">
+                                    <h6>Rate Increases</h6>
+                                    ${scenarios.filter(s => s.bp > 0).map(s => `
+                                        <p>${s.bp}bp: ${s.prob.toFixed(1)}%</p>
+                                        <div class="probability-bar">
+                                            <div class="probability-fill" style="width: ${s.prob}%"></div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Add correlation matrix
+                html += `
+                        </div>
+                        <div class="historical-analysis">
+                            <h4>Correlation Analysis (30 Days)</h4>
+                            <div class="correlation-matrix">
+                                <div class="correlation-cell correlation-header"></div>
+                                ${seriesNames.map(name => `
+                                    <div class="correlation-cell correlation-header">${name}</div>
+                                `).join('')}
+                                ${correlationMatrix.map((row, i) => `
+                                    <div class="correlation-cell correlation-header">${seriesNames[i]}</div>
+                                    ${row.map(corr => `
+                                        <div class="correlation-cell">${corr.toFixed(2)}</div>
+                                    `).join('')}
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="curve-analysis">
+                            <h4>Forward Curve Analysis</h4>
+                            <p>Curve Slope (1M to 12M): ${curveSlope.toFixed(2)}%</p>
+                            <p>Curve Status: <strong>${curveAnalysis}</strong></p>
+                            <p>Last Updated: ${fedFundsData.date}</p>
+                        </div>
+                    </div>
+                `;
+
+                analysisDiv.innerHTML = html;
+
+            } catch (error) {
+                analysisDiv.innerHTML = `<div style="color: red;">Error analyzing Fed Funds: ${error.message}</div>`;
+            }
+        }
+
+        // Market hours check
+        function isMarketOpen() {
+            const now = new Date();
+            const day = now.getDay();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+            
+            // Check if it's a weekday
+            if (day === 0 || day === 6) return false;
+            
+            // Convert to ET (assuming server is in ET)
+            const etHour = hour;
+            
+            // Regular market hours: 9:30 AM - 4:00 PM ET
+            if (etHour > 9 || (etHour === 9 && minute >= 30)) {
+                if (etHour < 16) return true;
+            }
+            
+            // Pre-market hours: 4:00 AM - 9:30 AM ET
+            if (etHour >= 4 && etHour < 9) return true;
+            if (etHour === 9 && minute < 30) return true;
+            
+            return false;
+        }
+
+        function isPreMarket() {
+            const now = new Date();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+            const etHour = hour;
+            
+            return (etHour >= 4 && etHour < 9) || (etHour === 9 && minute < 30);
+        }
+
+        async function fetchMarketData() {
+            try {
+                Logger.log('Fetching market data...', 'info');
+                
+                const marketData = await Promise.all([
+                    fetchNasdaqData(MARKET_SERIES.VIX.dataset, { limit: 1 }),
+                    fetchNasdaqData(MARKET_SERIES.SPY.dataset, { limit: 1 }),
+                    fetchNasdaqData(MARKET_SERIES.GOLD.dataset, { limit: 1 }),
+                    fetchNasdaqData(MARKET_SERIES.DXY.dataset, { limit: 1 }),
+                    fetchNasdaqData(MARKET_SERIES.BONDS.dataset, { limit: 1 })
+                ]);
+
+                return {
+                    vix: marketData[0].dataset_data.data[0][1],
+                    spy: marketData[1].dataset_data.data[0][1],
+                    gold: marketData[2].dataset_data.data[0][1],
+                    dxy: marketData[3].dataset_data.data[0][1],
+                    bonds: marketData[4].dataset_data.data[0]
+                };
+            } catch (error) {
+                Logger.log(`Error fetching market data: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        function updateMarketIndicators(data) {
+            const indicatorsDiv = document.getElementById('marketIndicators');
+            if (!indicatorsDiv) return;
+
+            indicatorsDiv.innerHTML = `
+                <div class="market-grid">
+                    <div class="market-card ${data.vix > 20 ? 'high-volatility' : 'low-volatility'}">
+                        <h3>VIX</h3>
+                        <p class="value">${data.vix.toFixed(2)}</p>
+                        <p class="description">Volatility Index</p>
+                    </div>
+                    <div class="market-card">
+                        <h3>SPY</h3>
+                        <p class="value">$${data.spy.toFixed(2)}</p>
+                        <p class="description">S&P 500 ETF</p>
+                    </div>
+                    <div class="market-card">
+                        <h3>Gold Futures</h3>
+                        <p class="value">$${data.gold.toFixed(2)}</p>
+                        <p class="description">GC Futures</p>
+                    </div>
+                    <div class="market-card">
+                        <h3>DXY</h3>
+                        <p class="value">${data.dxy.toFixed(2)}</p>
+                        <p class="description">Dollar Index</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function updateAllData() {
+            try {
+                const [fredData, marketData] = await Promise.all([
+                    fetchLatestData(),
+                    fetchMarketData()
+                ]);
+
+                updateMarketIndicators(marketData);
+                updateYieldCurveChart();
+                updateCalculations();
+                updateYieldAnalysis();
+                updateFedFundsAnalysis();
+
+                Logger.log('All data updated successfully', 'success');
+            } catch (error) {
+                Logger.log(`Error updating data: ${error.message}`, 'error');
+            }
+        }
+
+        // Add market status indicator
+        const marketStatusDiv = document.createElement('div');
+        marketStatusDiv.className = 'market-status';
+        document.body.appendChild(marketStatusDiv);
+
+        function updateMarketStatus() {
+            const isOpen = isMarketOpen();
+            const isPre = isPreMarket();
+            marketStatusDiv.innerHTML = `
+                <strong>Market Status:</strong> 
+                ${isOpen ? (isPre ? 'Pre-Market' : 'Open') : 'Closed'}
+                <br>
+                <small>Next Update: ${isPre ? '5' : '15'} minutes</small>
+            `;
+        }
+
+        // Set up update intervals
+        function setupUpdateIntervals() {
+            // Update market status every minute
+            setInterval(updateMarketStatus, 60 * 1000);
+            updateMarketStatus();
+
+            // Set up data updates based on market hours
+            setInterval(() => {
+                if (isMarketOpen()) {
+                    updateAllData();
+                }
+            }, isPreMarket() ? UPDATE_INTERVALS.PREMARKET : UPDATE_INTERVALS.REGULAR);
+        }
+
+        // Initialize
+        setupUpdateIntervals();
+        updateAllData();
+
+        // Add a function to display logs
+        function displayLogs() {
+            const logs = Logger.getLogs();
+            const logDiv = document.createElement('div');
+            logDiv.className = 'log-container';
+            logDiv.innerHTML = `
+                <h3>System Logs</h3>
+                <div class="log-list">
+                    ${logs.map(log => `
+                        <div class="log-entry ${log.type}">
+                            <span class="log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                            <span class="log-message">${log.message}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            document.body.appendChild(logDiv);
+        }
+
+        // Initialize logging display
+        displayLogs();
+    </script>
+</body>
+</html> 
