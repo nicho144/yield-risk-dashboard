@@ -313,6 +313,8 @@
         
         <button class="refresh-button" onclick="fetchLatestData()">Refresh Data</button>
         <button class="refresh-button" onclick="testFredConnection()" style="background-color: #2196F3;">Test FRED Connection</button>
+        <button class="refresh-button" onclick="testNasdaqConnection()" style="background-color: #2196F3;">Test Nasdaq Connection</button>
+        <button class="refresh-button" onclick="testNewsConnection()" style="background-color: #2196F3;">Test News API Connection</button>
         <div id="loading" class="loading">Loading latest market data...</div>
         <div id="error" class="error-message"></div>
         <div id="lastUpdated" class="last-updated"></div>
@@ -407,6 +409,7 @@
         let yieldCurveChart;
         const FRED_API_KEY = 'dceb19d6ccadfb4115c3ac2493b7d5ed';
         const NASDAQ_API_KEY = 'XLTzbBjvffmrseg66XsR';
+        const NEWS_API_KEY = '6200c97fd9be4b00b36f0fbb9f11c55b';
 
         // FRED Series IDs with descriptions
         const FRED_SERIES = {
@@ -751,26 +754,66 @@
             }
         }
 
+        // Add API status indicators
+        function updateApiStatus(api, status, message) {
+            const apiTest = document.getElementById('apiTest');
+            apiTest.innerHTML += `<div class="log-entry ${status}">
+                <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                ${api}: ${message}
+            </div>`;
+        }
+
+        // Test FRED API connection
         async function testFredConnection() {
-            const apiTestDiv = document.getElementById('apiTest');
-            apiTestDiv.innerHTML = '<h3>Testing FRED API Connection...</h3>';
-            
             try {
-                // Test each series
-                for (const [key, series] of Object.entries(FRED_SERIES)) {
-                    const value = await fetchFredData(series.id);
-                    apiTestDiv.innerHTML += `
-                        <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                            <strong>${series.name}</strong><br>
-                            Series ID: ${series.id}<br>
-                            Description: ${series.description}<br>
-                            Latest Value: ${value.current.toFixed(2)}%<br>
-                            <a href="https://fred.stlouisfed.org/series/${series.id}" target="_blank">View on FRED</a>
-                        </div>
-                    `;
+                const response = await fetch(`https://api.stlouisfed.org/fred/series?series_id=FEDFUNDS&api_key=${FRED_API_KEY}&file_type=json`);
+                const data = await response.json();
+                if (data.seriess) {
+                    updateApiStatus('FRED', 'success', 'Connection successful');
+                    return true;
+                } else {
+                    updateApiStatus('FRED', 'error', 'Invalid response format');
+                    return false;
                 }
             } catch (error) {
-                apiTestDiv.innerHTML += `<div style="color: red;">Error: ${error.message}</div>`;
+                updateApiStatus('FRED', 'error', `Connection failed: ${error.message}`);
+                return false;
+            }
+        }
+
+        // Test Nasdaq API connection
+        async function testNasdaqConnection() {
+            try {
+                const response = await fetch(`https://data.nasdaq.com/api/v3/datasets/FRED/FEDFUNDS.json?api_key=${NASDAQ_API_KEY}`);
+                const data = await response.json();
+                if (data.dataset) {
+                    updateApiStatus('Nasdaq', 'success', 'Connection successful');
+                    return true;
+                } else {
+                    updateApiStatus('Nasdaq', 'error', 'Invalid response format');
+                    return false;
+                }
+            } catch (error) {
+                updateApiStatus('Nasdaq', 'error', `Connection failed: ${error.message}`);
+                return false;
+            }
+        }
+
+        // Test News API connection
+        async function testNewsConnection() {
+            try {
+                const response = await fetch(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${NEWS_API_KEY}`);
+                const data = await response.json();
+                if (data.articles) {
+                    updateApiStatus('News API', 'success', 'Connection successful');
+                    return true;
+                } else {
+                    updateApiStatus('News API', 'error', 'Invalid response format');
+                    return false;
+                }
+            } catch (error) {
+                updateApiStatus('News API', 'error', `Connection failed: ${error.message}`);
+                return false;
             }
         }
 
