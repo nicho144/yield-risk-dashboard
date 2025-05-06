@@ -1,4 +1,9 @@
-# OS generated files
+# API Keys and sensitive configuration
+config.js
+.env
+.env.local
+
+# System files
 .DS_Store
 .DS_Store?
 ._*
