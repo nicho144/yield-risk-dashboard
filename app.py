@@ -1,162 +1,149 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
-import os
-from dotenv import load_dotenv
-import requests
-import json
-
-from data_fetcher import DataFetcher
-from risk_calculations import RiskCalculator
-
-# Load environment variables
-load_dotenv()
-
-# Initialize components
-data_fetcher = DataFetcher()
-risk_calculator = RiskCalculator()
+import yfinance as yf
+import plotly.graph_objects as go
 
 # Set page config
 st.set_page_config(
-    page_title="Market Risk Dashboard",
+    page_title="Market Dashboard",
     page_icon="📊",
     layout="wide"
 )
 
-# Initialize session state
-if 'yield_data' not in st.session_state:
-    st.session_state.yield_data = {
-        '2Y': 0.0,
-        '5Y': 0.0,
-        '10Y': 0.0,
-        '30Y': 0.0,
-        'corporate': 0.0,
-        'high_yield_spread': 0.0
-    }
+# Title
+st.title("Market Dashboard")
 
-# Title and description
-st.title("Market Risk Dashboard")
-st.markdown("""
-This dashboard provides real-time analysis of market risk indicators, including:
-- Yield curve analysis
-- Risk assessment metrics
-- Pre-market indicators
-- Market trend analysis
-""")
+# Define date variables
+TODAY = datetime.now()
+YESTERDAY = TODAY - timedelta(days=1)
 
-# Create two columns for the layout
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader("Yield Curve Analysis")
-    
-    # Yield inputs
-    st.write("Current Yields")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.session_state.yield_data['2Y'] = st.number_input("2Y Treasury", value=st.session_state.yield_data['2Y'], format="%.2f")
-    with col2:
-        st.session_state.yield_data['5Y'] = st.number_input("5Y Treasury", value=st.session_state.yield_data['5Y'], format="%.2f")
-    with col3:
-        st.session_state.yield_data['10Y'] = st.number_input("10Y Treasury", value=st.session_state.yield_data['10Y'], format="%.2f")
-    with col4:
-        st.session_state.yield_data['30Y'] = st.number_input("30Y Treasury", value=st.session_state.yield_data['30Y'], format="%.2f")
-
-    # Corporate and High Yield inputs
-    col1, col2 = st.columns(2)
-    with col1:
-        st.session_state.yield_data['corporate'] = st.number_input("Corporate Yield", value=st.session_state.yield_data['corporate'], format="%.2f")
-    with col2:
-        st.session_state.yield_data['high_yield_spread'] = st.number_input("High Yield Spread", value=st.session_state.yield_data['high_yield_spread'], format="%.2f")
-
-    # Calculate metrics
-    def calculate_metrics():
-        # Calculate 2s10s spread
-        spread_2s10s = st.session_state.yield_data['10Y'] - st.session_state.yield_data['2Y']
-        
-        # Calculate real rates (assuming 2% inflation for demo)
-        real_rates = {
-            '2Y': st.session_state.yield_data['2Y'] - 2.0,
-            '5Y': st.session_state.yield_data['5Y'] - 2.0,
-            '10Y': st.session_state.yield_data['10Y'] - 2.0,
-            '30Y': st.session_state.yield_data['30Y'] - 2.0
+def fetch_treasury_data():
+    """Fetch treasury data from Yahoo Finance"""
+    try:
+        symbols = {
+            '2Y': '^UST2YR',
+            '5Y': '^UST5YR',
+            '10Y': '^TNX',
+            '30Y': '^TYX'
         }
         
-        # Determine risk status
-        risk_score = 0
-        if spread_2s10s < 0:
-            risk_score += 2  # Inverted yield curve
-        elif spread_2s10s < 0.5:
-            risk_score += 1  # Flat yield curve
-            
-        if st.session_state.yield_data['high_yield_spread'] > 5:
-            risk_score += 2  # High yield spread indicates risk
-        elif st.session_state.yield_data['high_yield_spread'] > 3:
-            risk_score += 1
-            
-        risk_status = "Risk Off" if risk_score >= 3 else "Risk On" if risk_score <= 1 else "Neutral"
+        data = {}
+        for tenor, symbol in symbols.items():
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(start=YESTERDAY, end=TODAY)
+            if not hist.empty:
+                data[tenor] = {
+                    'current': hist['Close'].iloc[-1],
+                    'previous': hist['Close'].iloc[0]
+                }
         
-        return {
-            'spread_2s10s': spread_2s10s,
-            'real_rates': real_rates,
-            'risk_score': risk_score,
-            'risk_status': risk_status
-        }
+        return data if data else None
+    except Exception as e:
+        st.error(f"Error fetching treasury data: {str(e)}")
+        return None
 
-    # Display metrics
-    metrics = calculate_metrics()
-    
-    # Create yield curve plot
+def fetch_vix_data():
+    """Fetch VIX data"""
+    try:
+        vix = yf.Ticker("^VIX")
+        hist = vix.history(start=YESTERDAY, end=TODAY)
+        if not hist.empty:
+            return {
+                'current': hist['Close'].iloc[-1],
+                'previous': hist['Close'].iloc[0]
+            }
+        return None
+    except Exception as e:
+        st.error(f"Error fetching VIX data: {str(e)}")
+        return None
+
+def create_yield_curve_plot(treasury_data):
+    """Create yield curve visualization"""
+    if not treasury_data:
+        return None
+        
     fig = go.Figure()
+    
+    # Plot current yield curve
+    tenors = ['2Y', '5Y', '10Y', '30Y']
+    current_rates = [treasury_data[t]['current'] for t in tenors]
+    previous_rates = [treasury_data[t]['previous'] for t in tenors]
+    
     fig.add_trace(go.Scatter(
-        x=['2Y', '5Y', '10Y', '30Y'],
-        y=[st.session_state.yield_data['2Y'], 
-           st.session_state.yield_data['5Y'],
-           st.session_state.yield_data['10Y'],
-           st.session_state.yield_data['30Y']],
+        x=tenors,
+        y=current_rates,
         mode='lines+markers',
-        name='Yield Curve'
+        name='Current',
+        line=dict(color='blue', width=2)
     ))
     
+    fig.add_trace(go.Scatter(
+        x=tenors,
+        y=previous_rates,
+        mode='lines+markers',
+        name='Previous',
+        line=dict(color='red', width=2, dash='dash')
+    ))
+    
+    # Calculate curve changes
+    spread_change = (treasury_data['10Y']['current'] - treasury_data['2Y']['current']) - \
+                   (treasury_data['10Y']['previous'] - treasury_data['2Y']['previous'])
+    
     fig.update_layout(
-        title='Treasury Yield Curve',
-        xaxis_title='Maturity',
+        title=f'Yield Curve Analysis (2s10s Spread Change: {spread_change:.2f}%)',
+        xaxis_title='Tenor',
         yaxis_title='Yield (%)',
-        showlegend=True
+        showlegend=True,
+        hovermode='x unified'
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    return fig
 
-with col2:
-    st.subheader("Risk Assessment")
+# Main dashboard
+with st.spinner('Fetching market data...'):
+    # Fetch data
+    treasury_data = fetch_treasury_data()
+    vix_data = fetch_vix_data()
     
-    # Display risk metrics
-    st.metric("2s10s Spread", f"{metrics['spread_2s10s']:.2f}%")
-    st.metric("Risk Score", f"{metrics['risk_score']}/4")
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Risk status with color
-    risk_color = "red" if metrics['risk_status'] == "Risk Off" else "green" if metrics['risk_status'] == "Risk On" else "orange"
-    st.markdown(f"### Risk Status: <span style='color:{risk_color}'>{metrics['risk_status']}</span>", unsafe_allow_html=True)
+    if treasury_data:
+        with col1:
+            st.metric(
+                "2Y Yield",
+                f"{treasury_data['2Y']['current']:.2f}%",
+                f"{treasury_data['2Y']['current'] - treasury_data['2Y']['previous']:.2f}%"
+            )
+        with col2:
+            st.metric(
+                "10Y Yield",
+                f"{treasury_data['10Y']['current']:.2f}%",
+                f"{treasury_data['10Y']['current'] - treasury_data['10Y']['previous']:.2f}%"
+            )
+        with col3:
+            spread = treasury_data['10Y']['current'] - treasury_data['2Y']['current']
+            prev_spread = treasury_data['10Y']['previous'] - treasury_data['2Y']['previous']
+            st.metric(
+                "2s10s Spread",
+                f"{spread:.2f}%",
+                f"{spread - prev_spread:.2f}%"
+            )
     
-    # Real rates
-    st.subheader("Real Rates")
-    for maturity, rate in metrics['real_rates'].items():
-        st.metric(f"{maturity} Real Rate", f"{rate:.2f}%")
-
-# Pre-market section
-st.subheader("Pre-Market Indicators")
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric("Gold Futures", "2,345.67", "+1.2%")
-with col2:
-    st.metric("10Y Treasury Futures", "98.45", "-0.3%")
-with col3:
-    st.metric("Dollar Index", "104.32", "+0.1%")
-
-# Add refresh button
-if st.button("Refresh Data"):
-    st.experimental_rerun() 
+    if vix_data:
+        with col4:
+            st.metric(
+                "VIX",
+                f"{vix_data['current']:.2f}",
+                f"{vix_data['current'] - vix_data['previous']:.2f}"
+            )
+    
+    # Display yield curve plot
+    if treasury_data:
+        st.plotly_chart(create_yield_curve_plot(treasury_data), use_container_width=True)
+    
+    # Add refresh button
+    if st.button('Refresh Data'):
+        st.experimental_rerun() 

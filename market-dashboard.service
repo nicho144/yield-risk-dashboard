@@ -1,0 +1,14 @@
+[Unit]
+Description=Financial Market Dashboard
+After=network.target
+
+[Service]
+User=admin
+WorkingDirectory=/Users/admin/Documents/News Dash Board
+ExecStart=/Users/admin/Documents/News Dash Board/deploy.sh
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target 
